@@ -1,1 +1,6 @@
-print("Telegram front chat service started")
+import time
+
+print("Service started", flush=True)
+
+while True:
+    time.sleep(60)
