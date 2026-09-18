@@ -23,21 +23,17 @@ back = TelegramClient(
     API_HASH
 )
 
-# Зв’язок:
-# back_message_id -> front_message_id
 message_map = {}
 
 
 @front.on(events.NewMessage(incoming=True))
 async def front_handler(event):
-    # Поки працюємо тільки з твоїм основним Telegram
     if event.sender_id != YOUR_TELEGRAM_ID:
         return
 
-    # Пересилаємо повідомлення в Back Bot
     sent = await back.send_message(
         YOUR_TELEGRAM_ID,
-        event.message
+        event.raw_text
     )
 
     message_map[sent.id] = event.message.id
@@ -50,35 +46,39 @@ async def front_handler(event):
 
 @back.on(events.NewMessage(incoming=True))
 async def back_handler(event):
-    # Ігноруємо всіх, крім тебе
     if event.sender_id != YOUR_TELEGRAM_ID:
         return
 
-    reply_to = event.message.reply_to_msg_id
-
-    if reply_to and reply_to in message_map:
-        front_message_id = message_map[reply_to]
-
-        await front.send_message(
-            YOUR_TELEGRAM_ID,
-            event.message,
-            reply_to=front_message_id
-        )
+    try:
+        text = event.raw_text
+        reply_to = event.message.reply_to_msg_id
 
         print(
-            f"Back reply -> Front: "
-            f"{reply_to} -> {front_message_id}"
+            f"Back received: text={text}, "
+            f"reply_to={reply_to}"
         )
 
-    else:
-        # Якщо в Back пишеш без Reply —
-        # просто нове повідомлення у Front
-        await front.send_message(
-            YOUR_TELEGRAM_ID,
-            event.message
-        )
+        if reply_to and reply_to in message_map:
+            front_message_id = message_map[reply_to]
 
-        print("Back -> Front new message")
+            await front.send_message(
+                YOUR_TELEGRAM_ID,
+                text,
+                reply_to=front_message_id
+            )
+
+            print("Back reply -> Front sent")
+
+        else:
+            await front.send_message(
+                YOUR_TELEGRAM_ID,
+                text
+            )
+
+            print("Back -> Front sent")
+
+    except Exception as e:
+        print("BACK HANDLER ERROR:", repr(e))
 
 
 async def main():
