@@ -10,6 +10,7 @@ SESSION = os.environ["TG_SESSION"]
 
 BACK_BOT_TOKEN = os.environ["BACK_BOT_TOKEN"]
 YOUR_TELEGRAM_ID = int(os.environ["YOUR_TELEGRAM_ID"])
+YOUR_TELEGRAM_USERNAME = os.environ["YOUR_TELEGRAM_USERNAME"]
 
 front = TelegramClient(
     StringSession(SESSION),
@@ -24,12 +25,18 @@ back = TelegramClient(
 )
 
 message_map = {}
+front_peer = None
 
 
 @front.on(events.NewMessage(incoming=True))
 async def front_handler(event):
+    global front_peer
+
     if event.sender_id != YOUR_TELEGRAM_ID:
         return
+
+    # Зберігаємо entity твого основного акаунта
+    front_peer = await event.get_sender()
 
     sent = await back.send_message(
         YOUR_TELEGRAM_ID,
@@ -46,6 +53,8 @@ async def front_handler(event):
 
 @back.on(events.NewMessage(incoming=True))
 async def back_handler(event):
+    global front_peer
+
     if event.sender_id != YOUR_TELEGRAM_ID:
         return
 
@@ -58,11 +67,17 @@ async def back_handler(event):
             f"reply_to={reply_to}"
         )
 
+        # Якщо ще не маємо entity — знаходимо по username
+        if front_peer is None:
+            front_peer = await front.get_entity(
+                YOUR_TELEGRAM_USERNAME
+            )
+
         if reply_to and reply_to in message_map:
             front_message_id = message_map[reply_to]
 
             await front.send_message(
-                YOUR_TELEGRAM_ID,
+                front_peer,
                 text,
                 reply_to=front_message_id
             )
@@ -71,7 +86,7 @@ async def back_handler(event):
 
         else:
             await front.send_message(
-                YOUR_TELEGRAM_ID,
+                front_peer,
                 text
             )
 
@@ -82,11 +97,21 @@ async def back_handler(event):
 
 
 async def main():
+    global front_peer
+
     await front.start()
 
     await back.start(
         bot_token=BACK_BOT_TOKEN
     )
+
+    try:
+        front_peer = await front.get_entity(
+            YOUR_TELEGRAM_USERNAME
+        )
+        print("Main Telegram entity resolved")
+    except Exception as e:
+        print("Entity resolve warning:", repr(e))
 
     print("Front account connected")
     print("Back bot connected")
